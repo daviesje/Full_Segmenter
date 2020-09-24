@@ -2,21 +2,35 @@
 Predict from images
 """
 
-from src import data, outputs
+#from .context.segmenter import data, outputs
+from context import segmenter
+from segmenter import data, outputs
 import tensorflow as tf
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
 import sys
+from PIL import Image
 
 model = tf.keras.models.load_model(sys.argv[1]
                                    ,custom_objects={'<lambda>': lambda y_true, y_pred: y_pred})
 #model = tf.keras.models.load_model('./models/checkpoint.hdf5')
 
+#Test read
+image = np.array(Image.open('../multiclass_seg/test_masks/mask_0106_251.png',mode='r'))
+print(np.unique(image.reshape(65536,1),return_counts=True,axis=0))
+
+mask = tf.io.read_file('../multiclass_seg/test_masks/mask_0106_251.png')
+mask = tf.image.decode_image(mask,channels=1)
+mask = mask[...,0] // 16
+mask = tf.one_hot(mask, 7)
+print(np.unique(mask.numpy().reshape(65536,7),return_counts=True,axis=0))
+
 
 # LOAD IMAGES
-data_dir = '../tiles_seg/'
-train,test,_ = data.load_images(data_dir,(256,256))
+data_dir = '../multiclass_seg/'
+train,test,info = data.load_images(data_dir,(256,256),n_labels=7)
+ntest = info['test_count']
 
 for image, mask in test.take(1):
     sample_image, sample_mask = image, mask
@@ -25,62 +39,44 @@ for image, mask in test.take(1):
     # display([sample_image, sample_mask])
     print('test')
     print(f'debug: image size,min,max,avg {ibuf.shape, ibuf.dtype, ibuf.min(), ibuf.max(), ibuf.mean()}')
-    print(f'debug: mask size,min,max,avg {mbuf.shape, mbuf.dtype, mbuf.min(), mbuf.max(), mbuf.mean()}')
+    print(f'debug: mask size,min,max,avg {mbuf.shape, mbuf.dtype, mbuf.min(), mbuf.max(), mbuf.mean(axis=(0,1))}')
 
 ntake = 6
+
+nthrsh = 1
+thresholds = np.ones((nthrsh,7))
+
 image_arr = outputs.show_predictions(model,test.shuffle(100),ntake,interactive=False)
-image_arr = outputs.show_predictions(model,train.shuffle(100),ntake,interactive=False)
+#image_arr = outputs.show_predictions(model,train.shuffle(100),ntake,interactive=False)
 
-true_pos = 0
-true_neg = 0
-fals_pos = 0
-fals_neg = 0
+#quit()
+error_matrix = np.zeros((nthrsh,7,7))
 
-mask_frac = np.array([])
-pred_frac = np.array([])
+mask_frac = np.zeros((nthrsh,ntest,7))
+pred_frac = np.zeros((nthrsh,ntest,7))
+for i, t in enumerate(thresholds):
+    weights = t
+    print(f'%{i}th threshold, {t}')
+    #TODO: this is really inefficient, will separate create_mask into output
+    #  generation and prediction, to generate one mask and apply several weights
+    j = 0
+    for image, mask in test:
+        if j%25==0: print(j)
+        #print(np.unique(mask.numpy().reshape(65536,7),return_counts=True,axis=0))
+        pred, mask = outputs.create_mask(model,image,mask,weights=weights)
 
-for image, mask in test:
-    pred, mask = outputs.create_mask(model,image,mask)
+        # PER PIXEL ANALYSIS
+        for mpix,ppix in zip(mask.numpy().flatten(),pred.numpy().flatten()):
+            error_matrix[i,mpix,ppix] += 1
 
-    # PER PIXEL ANALYSIS
-    true_pos += np.sum(np.logical_and(pred==1,mask==1))
-    true_neg += np.sum(np.logical_and(pred==0,mask==0))
-    fals_pos += np.sum(np.logical_and(pred==1,mask==0))
-    fals_neg += np.sum(np.logical_and(pred==0,mask==1))
+        # PER IMAGE ANALYSIS (% glare)
+        for ii in range(7):
+            mask_frac[i,j,ii] = np.sum(mask==ii)/mask.numpy().size
+            pred_frac[i,j,ii] = np.sum(pred==ii)/pred.numpy().size
+        j = j + 1
 
-    # PER IMAGE ANALYSIS (% glare)
-    mask_frac = np.append(mask_frac,np.sum(mask==1)/mask.numpy().size)
-    pred_frac = np.append(pred_frac,np.sum(pred==1)/pred.numpy().size)
-
-print(f'True positives : {true_pos}')
-print(f'False positives : {fals_pos}')
-print(f'True negatives : {true_neg}')
-print(f'False negatives : {fals_neg}')
-
-print(pred_frac[mask_frac==0])
-
-idx = mask_frac != 0
-print(idx.shape)
-mask_frac = mask_frac[idx]
-print(idx.shape)
-pred_frac = pred_frac[idx]
-
-print(f'average excess glare fraction : {((pred_frac - mask_frac)/mask_frac).mean()}')
-print(f'RMS excess glare fraction : {np.sqrt((((pred_frac - mask_frac)/mask_frac) ** 2).mean())}')
-
-fig = plt.figure()
-ax = fig.add_subplot(121)
-ax.scatter(mask_frac,(pred_frac-mask_frac)/mask_frac,s=20)
-
-ax.plot([0.,0.1],[0.,0.],'k:')
-ax.set_xlabel('glare fraction')
-ax.set_ylabel('excess prediction glare (% of glare fraction)')
-
-ax = fig.add_subplot(122)
-ax.scatter(mask_frac,(pred_frac-mask_frac),s=20)
-
-ax.plot([0.,0.1],[0.,0.],'k:')
-ax.set_xlabel('glare fraction')
-ax.set_ylabel('excess prediction glare (% of image)')
-
-plt.show()
+mask_sums = error_matrix.sum(axis=1)
+np.set_printoptions(precision=3,suppress=True)
+print(error_matrix/mask_sums[:,None,:]*100)
+print(mask_frac.mean(axis=(0,1)))
+print(pred_frac.mean(axis=(0,1)))
