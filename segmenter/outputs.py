@@ -53,13 +53,18 @@ def show_predictions(model, dataset, num=1,weights=None,interactive=False):
             buf = (pred_mask[0] > weights).squeeze()
         image_arr.append([image, mask, buf])
     # PLOT IMAGE, LABELS, PREDICTION
+
+    cmap = plt.get_cmap('viridis',pred_mask.shape[-1])
+
     rows = 3
     cols = num
     gs = gridspec.GridSpec(rows, cols,hspace=0,wspace=0)
+    clim = [-0.5,pred_mask.shape[-1]-0.5]
+    categories = ['bg','glare','coral','newdead','bleach','seagrass','dead']
+    #categories = ['bg','glare','coral','bleach']
 
     fig = plt.figure(figsize=(cols*2, rows*2))
     for i, X in enumerate(image_arr):
-        clim = [0,X[2].numpy().max()]
         ax = fig.add_subplot(gs[0, i])
         if i == 0: ax.set_ylabel('image')
         ax.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
@@ -67,14 +72,17 @@ def show_predictions(model, dataset, num=1,weights=None,interactive=False):
         ax = fig.add_subplot(gs[1, i])
         if i == 0: ax.set_ylabel('mask')
         ax.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-        ax.imshow(X[1],clim=clim)
+        ax.imshow(X[1],clim=clim,cmap=cmap)
         ax = fig.add_subplot(gs[2, i])
         if i == 0: ax.set_ylabel('pred')
         ax.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-        ax.imshow(X[2],clim=clim)
+        im = ax.imshow(X[2],clim=clim,cmap=cmap)
+
+    cb = plt.colorbar(im,ax=fig.axes,ticks=range(pred_mask.shape[-1]))
+    cb.ax.set_yticklabels(categories)
 
     if interactive:
         plt.show()
 
-    fig.savefig('./plots/predictions.png')
+    fig.savefig('./plots/predictions_2.png')
     return image_arr

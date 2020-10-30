@@ -5,7 +5,6 @@ Package containing setup of datasets for the segmenter
 
 import tensorflow as tf
 import numpy as np
-import tensorflow_datasets as tfds
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import pathlib
 
@@ -21,7 +20,6 @@ class Constants:
         self.n_labels = 7
 
 constants = Constants()
-
 
 def transform(datapoint):
     # TODO: put more transformations, add calls in loading
@@ -46,45 +44,25 @@ def load_mask(mask_path):
     mask = tf.io.read_file(mask_path)
     mask = tf.image.decode_png(mask, channels=constants.mask_channels)
     mask = mask[...,0] // 16
-    
+
+    if constants.n_labels == 4:
+        #seagrass, newdead and dead set to background
+        check = tf.math.logical_or(mask==3,mask==5)
+        check = tf.cast(tf.math.logical_not(tf.math.logical_or(check,mask==6)),tf.uint8)
+        #shuffle bleached back to index 3
+        check2 = tf.cast(mask==k,tf.uint8)
+        mask = mask*check - check2
+
+    elif constants.n_labels == 2:
+        #only glare
+        check = tf.cast(mask == 1,tf.uint8)
+        mask = mask * check
+
     mask = tf.one_hot(mask, constants.n_labels)
 
     #mask = tf.image.resize(mask, constants.img_size)
 
     return mask
-
-def load_pets_train(datapoint):
-    input_image = tf.image.resize(datapoint['image'], constants.img_size)
-    input_mask = tf.image.resize(datapoint['segmentation_mask'], constants.img_size)
-
-    if tf.random.uniform(()) > 0.5:
-        input_image = tf.image.flip_left_right(input_image)
-        input_mask = tf.image.flip_left_right(input_mask)
-        # MORE TRANSFORMATIONS HERE
-
-    input_image = tf.cast(input_image, tf.float32) / 255.0
-    input_mask -= 1
-
-    return input_image, input_mask
-
-
-def load_pets_test(datapoint):
-    input_image = tf.image.resize(datapoint['image'], constants.img_size)
-    input_mask = tf.image.resize(datapoint['segmentation_mask'], constants.img_size)
-
-    input_image = tf.cast(input_image, tf.float32) / 255.0
-    input_mask -= 1
-
-    return input_image, input_mask
-
-
-def load_pets():
-    dataset, info = tfds.load('oxford_iiit_pet:3.*.*', with_info=True)
-
-    train = dataset['train'].map(load_pets_train, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    test = dataset['test'].map(load_pets_test)
-
-    return train, test, info
 
 
 # Tensorflow dataset loading (DOES NOT NEED TO FIT IN MEMORY)
@@ -97,10 +75,10 @@ def load_images(data_dir, img_size=(128, 128), img_channels=3, mask_channels=1, 
     constants.n_labels = n_labels
 
     # file list -> dataset
-    x_train = tf.data.Dataset.list_files(str(data_dir / 'train_tiles/t*.png'),shuffle=False)
-    x_test = tf.data.Dataset.list_files(str(data_dir / 'test_tiles/t*.png'),shuffle=False)
-    y_train = tf.data.Dataset.list_files(str(data_dir / 'train_masks/m*.png'),shuffle=False)
-    y_test = tf.data.Dataset.list_files(str(data_dir / 'test_masks/m*.png'),shuffle=False)
+    x_train = tf.data.Dataset.list_files(str(data_dir / 'train_tiles/tile*.png'),shuffle=False)
+    x_test = tf.data.Dataset.list_files(str(data_dir / 'test_tiles/tile*.png'),shuffle=False)
+    y_train = tf.data.Dataset.list_files(str(data_dir / 'train_masks/mask*.png'),shuffle=False)
+    y_test = tf.data.Dataset.list_files(str(data_dir / 'test_masks/mask*.png'),shuffle=False)
 
 
     # list dataset -> image dataset
