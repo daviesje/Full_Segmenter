@@ -47,7 +47,7 @@ def up_layer(input_tensor, concat_tensor, n_filters, kernel_size=3, batchnorm=Tr
     return conv
 
 
-def unet(pretrained_weights=None, input_size=(256, 256, 3), n_output=1, n_base=16,batchnorm=True,dropout=0,n_layers=4)):
+def unet(pretrained_weights=None, input_size=(256, 256, 3), n_output=1, n_base=16,batchnorm=True,dropout=0,n_layers=4):
     # input layer
     in1 = Input(input_size)
     
@@ -61,7 +61,7 @@ def unet(pretrained_weights=None, input_size=(256, 256, 3), n_output=1, n_base=1
         inp = d
         concat_list.append(c)
     # convolution at bottom
-    enc_out = conv_block(d4, n_base*16,batchnorm=batchnorm)
+    enc_out = conv_block(inp, n_base*16,batchnorm=batchnorm)
 
     # upward length
     inp = enc_out
@@ -71,7 +71,7 @@ def unet(pretrained_weights=None, input_size=(256, 256, 3), n_output=1, n_base=1
         inp = u
     
     # output layer
-    ou1 = Conv2D(n_output, (1, 1), activation='sigmoid')(u1)
+    ou1 = Conv2D(n_output, (1, 1), activation='softmax')(inp)
     
     model = Model([in1], [ou1])
 

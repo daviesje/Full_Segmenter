@@ -3,8 +3,11 @@ from matplotlib import pyplot as plt
 from matplotlib import gridspec
 
 #TODO: generating a mask for each weight set is inefficient, do something better
-def create_mask(model,image,mask,weights=None):
-    pred_mask = model.predict(image[None, ...])
+def create_mask(model,image,mask=None,weights=None):
+    if len(image.shape) == 3:
+        image = image[None,...]
+        
+    pred_mask = model.predict(image)
     
     #TODO: maybe not hardcode the shape (although it will never not be this)
     if weights is None:
@@ -18,12 +21,25 @@ def create_mask(model,image,mask,weights=None):
         #pred_mask = tf.maximum(tf.minimum(tf.multiply(pred_mask,weights),1),0)
         pred_mask = tf.multiply(pred_mask,weights)
 
-        buf = tf.argmax(pred_mask[0], axis=-1)
-        mask = tf.argmax(mask, axis=-1)
+        buf = tf.argmax(pred_mask, axis=-1)
+        if mask is not None:
+            mask = tf.argmax(mask, axis=-1)
     #binary case
     else:
-        buf = (pred_mask[0] > weights).squeeze()
+        buf = (pred_mask > weights).squeeze()
     return buf, mask
+
+def to_colors(mask,cmapstr=None):
+
+    if cmapstr is None:
+        cmapstr = 'viridis'
+
+    cmap = plt.get_cmap(cmapstr,int(tf.math.reduce_max(mask)) + 1)
+
+    mask = cmap(mask)
+    
+    return mask
+    
 
 #TODO: use create_mask here instead of doing it all again
 def show_predictions(model, dataset, num=1,weights=None,interactive=False):
@@ -60,29 +76,27 @@ def show_predictions(model, dataset, num=1,weights=None,interactive=False):
     cols = num
     gs = gridspec.GridSpec(rows, cols,hspace=0,wspace=0)
     clim = [-0.5,pred_mask.shape[-1]-0.5]
-    categories = ['bg','glare','coral','newdead','bleach','seagrass','dead']
+    #categories = ['bg','glare','coral','newdead','bleach','seagrass','dead']
     #categories = ['bg','glare','coral','bleach']
+    categories = ['bg','glare']
 
     fig = plt.figure(figsize=(cols*2, rows*2))
     for i, X in enumerate(image_arr):
         ax = fig.add_subplot(gs[0, i])
         if i == 0: ax.set_ylabel('image')
         ax.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-        ax.imshow(X[0])
+        ax.imshow(X[0],interpolation='none')
         ax = fig.add_subplot(gs[1, i])
         if i == 0: ax.set_ylabel('mask')
         ax.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-        ax.imshow(X[1],clim=clim,cmap=cmap)
+        ax.imshow(X[1],clim=clim,cmap=cmap,interpolation='none')
         ax = fig.add_subplot(gs[2, i])
         if i == 0: ax.set_ylabel('pred')
         ax.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-        im = ax.imshow(X[2],clim=clim,cmap=cmap)
+        im = ax.imshow(X[2],clim=clim,cmap=cmap,interpolation='none')
 
     cb = plt.colorbar(im,ax=fig.axes,ticks=range(pred_mask.shape[-1]))
     cb.ax.set_yticklabels(categories)
-
-    if interactive:
-        plt.show()
 
     fig.savefig('./plots/predictions_2.png')
     return image_arr

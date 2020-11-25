@@ -43,6 +43,8 @@ def load_image(file_path):
 def load_mask(mask_path):
     mask = tf.io.read_file(mask_path)
     mask = tf.image.decode_png(mask, channels=constants.mask_channels)
+    
+    #each png class is separated by 16 z-levels
     mask = mask[...,0] // 16
 
     if constants.n_labels == 4:
@@ -76,66 +78,31 @@ def load_images(data_dir, img_size=(128, 128), img_channels=3, mask_channels=1, 
 
     # file list -> dataset
     x_train = tf.data.Dataset.list_files(str(data_dir / 'train_tiles/tile*.png'),shuffle=False)
-    x_test = tf.data.Dataset.list_files(str(data_dir / 'test_tiles/tile*.png'),shuffle=False)
     y_train = tf.data.Dataset.list_files(str(data_dir / 'train_masks/mask*.png'),shuffle=False)
+    x_val = tf.data.Dataset.list_files(str(data_dir / 'val_tiles/tile*.png'),shuffle=False)
+    y_val = tf.data.Dataset.list_files(str(data_dir / 'val_masks/mask*.png'),shuffle=False)
+    x_test = tf.data.Dataset.list_files(str(data_dir / 'test_tiles/tile*.png'),shuffle=False)
     y_test = tf.data.Dataset.list_files(str(data_dir / 'test_masks/mask*.png'),shuffle=False)
 
 
     # list dataset -> image dataset
     x_train = x_train.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     y_train = y_train.map(load_mask, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    x_val = x_val.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    y_val = y_val.map(load_mask, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     x_test = x_test.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     y_test = y_test.map(load_mask, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     train = tf.data.Dataset.zip((x_train, y_train))
+    val = tf.data.Dataset.zip((x_val, y_val))
     test = tf.data.Dataset.zip((x_test, y_test))
 
     info = {}
     image_count = len(list(data_dir.glob('train_tiles/*.png')))
     info['train_count'] = image_count
+    val_count = len(list(data_dir.glob('val_tiles/*.png')))
+    info['val_count'] = val_count
     test_count = len(list(data_dir.glob('test_tiles/*.png')))
     info['test_count'] = test_count
 
-    return train, test, info
-
-
-# keras generator method
-def get_image_generators(data_dir, batch_size):
-    image_datagen = ImageDataGenerator(rescale=1. / 255)
-
-    mask_datagen = ImageDataGenerator(rescale=1,
-                                      dtype=int)
-    seed = 123
-
-    train_image_generator = image_datagen.flow_from_directory(
-        'tiles_seg/train_frames/',
-        batch_size=batch_size,
-        class_mode=None,
-        color_mode='rgb',
-        seed=seed)
-
-    train_mask_generator = mask_datagen.flow_from_directory(
-        'tiles_seg/train_masks/',
-        batch_size=batch_size,
-        class_mode=None,
-        color_mode='grayscale',
-        seed=seed)
-
-    val_image_generator = image_datagen.flow_from_directory(
-        'tiles_seg/val_frames/',
-        batch_size=batch_size,
-        class_mode=None,
-        color_mode='rgb',
-        seed=seed)
-
-    val_mask_generator = mask_datagen.flow_from_directory(
-        'tiles_seg/val_masks/',
-        batch_size=batch_size,
-        class_mode=None,
-        color_mode='grayscale',
-        seed=seed)
-
-    train_generator = zip(train_image_generator, train_mask_generator)
-    val_generator = zip(val_image_generator, val_mask_generator)
-
-    return train_generator, val_generator
+    return train, val, test, info

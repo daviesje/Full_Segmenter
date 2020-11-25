@@ -6,6 +6,8 @@ Segmenter Training Functions
 
 @author: jed12
 """
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1' 
 import context
 from segmenter import unet_model, data, outputs, multires_unet
 import tensorflow as tf
@@ -31,10 +33,11 @@ OUTPUT_CHANNELS = 2
 IMG_CHANNELS = 3
 input_size = IMG_SIZE + (IMG_CHANNELS,)
 
-train, test, info = data.load_images('../multiclass_seg/', img_size=IMG_SIZE, n_labels=OUTPUT_CHANNELS)
+train, val, test, info = data.load_images('../multiclass_seg/re_tiling/', img_size=IMG_SIZE, n_labels=OUTPUT_CHANNELS)
 
 TRAIN_LENGTH = info['train_count']
 print(f'debug: train images {TRAIN_LENGTH}')
+print(f'debug: val images {info["val_count"]}')
 print(f'debug: test images {info["test_count"]}')
 BATCH_SIZE = 4
 STEPS_PER_EPOCH = TRAIN_LENGTH // BATCH_SIZE
@@ -78,17 +81,14 @@ for image, mask in test.take(1):
 
 train_dataset = train.cache().shuffle(TRAIN_LENGTH).batch(BATCH_SIZE).repeat()
 train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+val_dataset = val.batch(BATCH_SIZE)
 test_dataset = test.batch(BATCH_SIZE)
-
-# image_batch, label_batch = next(iter(test_dataset))
-# show_batch(image_batch.numpy(), label_batch.numpy())
-# quit()
 
 if len(sys.argv) > 1:
     model = tf.keras.models.load_model(sys.argv[1], custom_objects={'<lambda>': lambda y_true, y_pred: y_pred})
 else:
     model = unet_model.unet(input_size=input_size, n_output=OUTPUT_CHANNELS
-                            , n_base=16, batchnorm=True, dropout=0.0)
+                            , n_base=16, batchnorm=True, dropout=0.15)
     #model = multires_unet.mr_unet(input_size=input_size, n_output=OUTPUT_CHANNELS
     #                        , batchnorm=False, dropout=0, n_layers=4)
 
@@ -116,7 +116,7 @@ VALIDATION_STEPS = info['test_count'] // BATCH_SIZE // VAL_SUBSPLITS
 checkpoint = ModelCheckpoint('./models/checkpoint.hdf5', monitor='val_loss',
                              verbose=1, save_best_only=True)
 
-csv_logger = CSVLogger('./log.out', separator=',')
+csv_logger = CSVLogger('./log_retiled_drop.out', separator=',')
 
 earlystopping = EarlyStopping(monitor='val_loss', verbose=1,
                               min_delta=0.0001, patience=10)
@@ -128,11 +128,10 @@ callbacks_list = [checkpoint, csv_logger, plateau, earlystopping]
 model_history = model.fit(train_dataset, epochs=EPOCHS,
                           steps_per_epoch=STEPS_PER_EPOCH,
                           validation_steps=None,
-                          validation_data=test_dataset,
+                          validation_data=val_dataset,
                           callbacks=callbacks_list)
 
-model.save('./models/model_unet_2_nodrop.hdf5')
-
+model.save('./models/model_unet_2_retiled_drop.hdf5')
 
 outputs.show_predictions(model,test.shuffle(100),num=6,interactive=False)
 
@@ -153,9 +152,9 @@ ax.set_ylim([0,loss[0]])
 ax.legend()
 ax=fig.add_subplot(212)
 ax.plot(epochs, acc, 'r', label='Training acc')
-ax.plot(epochs, val_loss, 'bo', label='Validation acc')
+ax.plot(epochs, val_acc, 'bo', label='Validation acc')
 ax.set_xlabel('Epoch')
 ax.set_ylabel('accuracy')
 ax.set_ylim([0,1])
 ax.legend()
-fig.savefig('./plots/history.png')
+fig.savefig('./plots/history_temp.png')
