@@ -20,39 +20,33 @@ if gpus:
   except RuntimeError as e:
     print(e)
 
-
 n_categ = 2
 
 model = tf.keras.models.load_model(sys.argv[1]
                                    ,custom_objects={'<lambda>': lambda y_true, y_pred: y_pred})
+#model = tf.keras.models.load_model(sys.argv[1])
 
 # LOAD IMAGES
-data_dir = '../multiclass_seg/re_tiling/'
-_,_,test,info = data.load_images(data_dir,(256,256),n_labels=n_categ)
+data_dir = '../multiclass_seg/x-sensing/'
+_,_,test,info = data.load_images(data_dir,(256,256),n_labels=n_categ,mask_channels=1)
 ntest = info['test_count']
 ntrain = info['train_count']
-
-for image, mask in test.take(1):
-    sample_image, sample_mask = image, mask
-    ibuf = sample_image.numpy()
-    mbuf = sample_mask.numpy()
-    # display([sample_image, sample_mask])
-    print('test')
-    print(f'debug: image size,min,max,avg {ibuf.shape, ibuf.dtype, ibuf.min(), ibuf.max(), ibuf.mean()}')
-    print(f'debug: mask size,min,max,avg {mbuf.shape, mbuf.dtype, mbuf.min(), mbuf.max(), mbuf.mean(axis=(0,1))}')
+print(f'total {ntest} testing images')
 
 ntake = 6
-thresholds = np.array([ [100,1],[20,1],[10,1],
-                        [4,1],[3,1],[2.5,1],
-                        [2,1],[1.5,1],[1,4],
-                        [1,10],[1,20],[1,100]])
+thresholds = np.array([ [20.,1.],[10.,1.],[5.,1.],
+                        [3.,1.],[2.,1.],[1,1.],
+                        [1.,2.],[1.,3.],[1.,5.],
+                        [1.,10.],[1.,20.],[1.,100.]])
 
-thresholds = np.array([[1.,1.]])
+#thresholds = np.array([[0.,0.2,0.4,0.6,0.8,1.]])
+#thresholds = np.array([[1.,1.]])
                         
 nthrsh = thresholds.shape[0]
 #thresholds = np.ones((nthrsh,n_categ))
+#thresholds = [None]
                         
-image_arr = outputs.show_predictions(model,test.shuffle(100),ntake,interactive=False)
+image_arr = outputs.show_predictions(model,test.shuffle(1000),ntake,interactive=True)
 
 error_matrix = np.zeros((nthrsh,n_categ,n_categ))
 
@@ -65,13 +59,16 @@ for i, t in enumerate(thresholds):
     #TODO: this is really inefficient, will separate create_mask into output
     #  generation and prediction, to generate one mask and apply several weights
     j = 0
-    for image, mask in test:
+    for image, mask in test.shuffle(1000):
         #if j%25==0: print(j)
         #print(np.unique(mask.numpy().reshape(65536,n_categ),return_counts=True,axis=0))
         pred, mask = outputs.create_mask(model,image,mask,weights=weights)
+        
 
         mbuf = mask.numpy()
         pbuf = pred.numpy()
+        vals,_ = tf.unique(mbuf.flatten())
+        valsp,_ = tf.unique(pbuf.flatten())
 
         for n_m in range(n_categ):
             #PER IMAGE SUMS
@@ -95,12 +92,18 @@ mask_sums = error_matrix.sum(axis=2)[:,:,None]
 fals_pos = error_matrix[:,0,1]
 true_pos = error_matrix[:,1,1]
 
-#FPR = [0,1]/([0,1]+ [0,0]) == FP / MN
-#TPR = [1,1]/([1,1] + [1,0]) == TP / MP
+#false pos / pred pos
+PRECISION = true_pos/pred_sums[:,0,1]
+#true pos / mask pos
+RECALL = true_pos/mask_sums[:,1,0]
+print(PRECISION)
+print(RECALL)
 
-fals_pos_2 = fals_pos/mask_sums[:,1,0]
-fals_pos = fals_pos/mask_sums[:,0,0]
-true_pos = true_pos/mask_sums[:,1,0]
+#FPR = [0,1]/([0,1]+ [0,0]) == false positives / mask negatives
+#TPR = [1,1]/([1,1] + [1,0]) == true positives / mask positives
+
+FPR = fals_pos/mask_sums[:,0,0]
+TPR = true_pos/mask_sums[:,1,0]
 
 total_acc = (error_matrix[:,0,0]+error_matrix[:,1,1])/error_matrix.sum(axis=(1,2))
 
@@ -130,36 +133,38 @@ print(np.histogram(mask_frac[:,:,1],bins=np.linspace(0,1,num=11))[0])
 if nthrsh > 1:
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.plot(fals_pos,true_pos,color='blue', marker='o'
+    ax.plot(FPR,TPR,color='blue', marker='o'
         , linestyle='solid', linewidth=2, markersize=5)
-    ax.set_xlabel('% False Positives')
-    ax.set_ylabel('% True Positives')
+    ax.set_xlabel('% False Positive Rate')
+    ax.set_ylabel('% True Positive Rate')
 
     fig.savefig('./plots/ROC.png')
         
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.plot(fals_pos_2,true_pos,color='blue', marker='o'
+    ax.plot(PRECISION,RECALL,color='blue', marker='o'
         , linestyle='solid', linewidth=2, markersize=5)
-    ax.set_xlabel('% False Positives')
-    ax.set_ylabel('% True Positives')
+    ax.set_xlabel('% Precision')
+    ax.set_ylabel('% Recall')
 
     fig.savefig('./plots/ROC_2.png')
 
 fig = plt.figure(figsize=(8,6))
 gs = gridspec.GridSpec(ncols=1,nrows=1,figure=fig)
 ax = fig.add_subplot(gs[0])
-ax.plot(xbase,zero,'k:')
+ax.plot(xbase,xbase,'k:')
 for i in range(nthrsh):
+    if np.any(thresholds[i,:] != 1):
+        continue
     xplot = mask_frac[i,...,1]
-    yplot = (pred_frac[i,...,1] - mask_frac[i,...,1])
+    yplot = (pred_frac[i,...,1])
     
     print(yplot.min(),yplot.max(),yplot.mean())
     ax.scatter(xplot,yplot,s=2)
 
-ax.set_ylabel('excess predicted glare (% of image)')
+ax.set_ylabel('predicted glare (% of image)')
 ax.set_xlabel('glare in mask (% of image)')
 
-#fig.savefig('./plots/excess.png')
+fig.savefig('./plots/fractions.png')
 
 plt.show()

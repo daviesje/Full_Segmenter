@@ -17,54 +17,77 @@ class Constants:
         self.img_size = (128, 128)
         self.img_channels = 3
         self.mask_channels = 1
-        self.n_labels = 7
+        self.n_labels = 2
+        self.z_steps = 255 #z difference between categories
 
 constants = Constants()
 
-def transform(datapoint):
+def scale_randomizer(image, scale, method='bilinear'):
+    '''
+    take an image and a scale > 1.
+    '''    
+    paddings = tf.constant([[1, 1],[1,1],[0,0]]) * scale #dont pad channels, pad other dims by (scale) pixels
+    input_image = tf.pad(image, paddings, mode='CONSTANT')
+    input_image = tf.image.resize(input_image, constants.img_size, method=method)
+    
+    return input_image
+
+def augment(input_image,input_mask):
     # TODO: put more transformations, add calls in loading
-    if tf.random.uniform() > 0.5:
-        datapoint[0] = tf.image.flip_left_right(datapoint[0])
-        datapoint[1] = tf.image.flip_left_right(datapoint[1])
+    if tf.random.uniform(()) > 0.5:
+        #FLIP
+        input_image = tf.image.flip_left_right(input_image)
+        input_mask = tf.image.flip_left_right(input_mask)
+
+    rot = tf.random.uniform(shape=(),minval=0,maxval=3,dtype=tf.dtypes.int32)
+    input_image = tf.image.rot90(input_image,k=rot)
+    input_mask = tf.image.rot90(input_mask,k=rot)
+
+    if tf.random.uniform(()) > 0:
+        #COLOR AUGMENTATION
+        input_image = tf.image.random_brightness(input_image, 0.2)
+        input_image = tf.image.random_saturation(input_image, 0.5, 2)
+        input_image = tf.image.random_hue(input_image, 0.2)
+        input_image = tf.image.random_contrast(input_image, 0.5, 2)
+
+    if tf.random.uniform(()) > 0:
+        #SCALE - ZOOM OUT AND PAD TILE TO 256x256 WITH 0
+        #up to a doubling of size
+        scale = tf.random.uniform((), 0, constants.img_size[0], dtype='int32')
+        input_image = scale_randomizer(input_image, scale,'bilinear')
+        input_mask = scale_randomizer(input_mask, scale, 'bilinear')
+    
+    input_image = tf.clip_by_value(input_image, 0.0, 1.0)
+
+    return input_image, input_mask
 
 #TODO a more modular data prepare function
 def prepare(dataset,format='png',augment=False,mask=False):
     return
 
-def load_image(file_path):
-    img = tf.io.read_file(file_path)
+
+def joint_parser(img_path,mask_path):
+
+    img = tf.io.read_file(img_path)
     img = tf.image.decode_png(img, channels=constants.img_channels)
     img = tf.image.convert_image_dtype(img, tf.float32)
-
-    #img = tf.image.resize(img, constants.img_size)
-
-    return img
-
-def load_mask(mask_path):
+    
     mask = tf.io.read_file(mask_path)
     mask = tf.image.decode_png(mask, channels=constants.mask_channels)
-    
-    #each png class is separated by 16 z-levels
-    mask = mask[...,0] // 16
+    mask = tf.image.convert_image_dtype(mask, tf.uint8)
 
-    if constants.n_labels == 4:
-        #seagrass, newdead and dead set to background
-        check = tf.math.logical_or(mask==3,mask==5)
-        check = tf.cast(tf.math.logical_not(tf.math.logical_or(check,mask==6)),tf.uint8)
-        #shuffle bleached back to index 3
-        check2 = tf.cast(mask==k,tf.uint8)
-        mask = mask*check - check2
+    #divide by brightness steps per category
+    mask = mask[...,0] // constants.z_steps
 
-    elif constants.n_labels == 2:
-        #only glare
-        check = tf.cast(mask == 1,tf.uint8)
-        mask = mask * check
-
-    mask = tf.one_hot(mask, constants.n_labels)
+    if constants.n_labels > 1:
+        mask = tf.one_hot(mask, constants.n_labels)
+        #mask = tf.squeeze(mask)
 
     #mask = tf.image.resize(mask, constants.img_size)
+    #mask = tf.where(mask == 255, np.dtype('uint8').type(0), mask)
 
-    return mask
+    return img, mask
+
 
 
 # Tensorflow dataset loading (DOES NOT NEED TO FIT IN MEMORY)
@@ -84,18 +107,17 @@ def load_images(data_dir, img_size=(128, 128), img_channels=3, mask_channels=1, 
     x_test = tf.data.Dataset.list_files(str(data_dir / 'test_tiles/tile*.png'),shuffle=False)
     y_test = tf.data.Dataset.list_files(str(data_dir / 'test_masks/mask*.png'),shuffle=False)
 
-
-    # list dataset -> image dataset
-    x_train = x_train.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    y_train = y_train.map(load_mask, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    x_val = x_val.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    y_val = y_val.map(load_mask, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    x_test = x_test.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    y_test = y_test.map(load_mask, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
     train = tf.data.Dataset.zip((x_train, y_train))
     val = tf.data.Dataset.zip((x_val, y_val))
     test = tf.data.Dataset.zip((x_test, y_test))
+
+    # list dataset -> image dataset
+    train = train.map(joint_parser, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    val = val.map(joint_parser, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    test = test.map(joint_parser, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    
+    #TODO: put behind flag
+    train = train.map(augment, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     info = {}
     image_count = len(list(data_dir.glob('train_tiles/*.png')))

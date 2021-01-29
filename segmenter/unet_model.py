@@ -71,7 +71,10 @@ def unet(pretrained_weights=None, input_size=(256, 256, 3), n_output=1, n_base=1
         inp = u
     
     # output layer
-    ou1 = Conv2D(n_output, (1, 1), activation='softmax')(inp)
+    if n_output == 1:
+        ou1 = Conv2D(n_output, (1, 1), activation='sigmoid')(inp)
+    else:
+        ou1 = Conv2D(n_output, (1, 1), activation='softmax')(inp)
     
     model = Model([in1], [ou1])
 

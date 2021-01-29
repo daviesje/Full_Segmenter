@@ -15,7 +15,7 @@ def multires_block(input_tensor,kernel_size=3,n_filters=24,batchnorm=True):
         l1 = BatchNormalization()(l1)
     
     l2 = Conv2D(filters=n_filters//3,kernel_size=(kernel_size,kernel_size), kernel_initializer="he_normal",
-                padding="same",activation='relu')(2)
+                padding="same",activation='relu')(l1)
                 
     if batchnorm:
         l2 = BatchNormalization()(l2)
@@ -105,7 +105,7 @@ def mr_unet(pretrained_weights=None, input_size=(256, 256, 3), n_output=1, n_bas
         concat_list.append(c)
     
     # convolution at bottom
-    enc_out = multires_block(d6,n_filters=n_base*16,batchnorm=batchnorm)
+    enc_out = multires_block(inp,n_filters=n_base*16,batchnorm=batchnorm)
 
     # upward length
     inp = enc_out

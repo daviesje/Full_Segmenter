@@ -18,6 +18,7 @@ import numpy as np
 
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
+print(gpus)
 if gpus:
   try:
     for gpu in gpus:
@@ -33,7 +34,7 @@ OUTPUT_CHANNELS = 2
 IMG_CHANNELS = 3
 input_size = IMG_SIZE + (IMG_CHANNELS,)
 
-train, val, test, info = data.load_images('../multiclass_seg/re_tiling/', img_size=IMG_SIZE, n_labels=OUTPUT_CHANNELS)
+train, val, test, info = data.load_images('../multiclass_seg/x-sensing/', img_size=IMG_SIZE, n_labels=OUTPUT_CHANNELS)
 
 TRAIN_LENGTH = info['train_count']
 print(f'debug: train images {TRAIN_LENGTH}')
@@ -65,58 +66,52 @@ for image, mask in train.take(1):
     sample_image, sample_mask = image, mask
     ibuf = sample_image.numpy()
     mbuf = sample_mask.numpy()
+    vals,_ = tf.unique(mbuf.flatten())
     # display([sample_image, sample_mask])
     print('train')
-    print(f'debug: image size,min,max,avg {ibuf.shape, ibuf.dtype, ibuf.min(), ibuf.max(), ibuf.mean()}')
-    print(f'debug: mask size,min,max,avg {mbuf.shape, mbuf.dtype, mbuf.min(), mbuf.max(), mbuf.mean(axis=(0,1))}')
-
-for image, mask in test.take(1):
-    sample_image, sample_mask = image, mask
-    ibuf = sample_image.numpy()
-    mbuf = sample_mask.numpy()
-    # display([sample_image, sample_mask])
-    print('test')
-    print(f'debug: image size,min,max,avg {ibuf.shape, ibuf.dtype, ibuf.min(), ibuf.max(), ibuf.mean()}')
-    print(f'debug: mask size,min,max,avg {mbuf.shape, mbuf.dtype, mbuf.min(), mbuf.max(), mbuf.mean(axis=(0,1))}')
+    print(f'debug: image size, {ibuf.shape}, dtype {ibuf.dtype}, min {ibuf.min()},max {ibuf.max()}, avg {ibuf.mean()}')
+    print(f'debug: mask size,dtype,vals {mbuf.shape, mbuf.dtype, vals.numpy()}')
 
 train_dataset = train.cache().shuffle(TRAIN_LENGTH).batch(BATCH_SIZE).repeat()
 train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 val_dataset = val.batch(BATCH_SIZE)
-test_dataset = test.batch(BATCH_SIZE)
 
 if len(sys.argv) > 1:
     model = tf.keras.models.load_model(sys.argv[1], custom_objects={'<lambda>': lambda y_true, y_pred: y_pred})
 else:
     model = unet_model.unet(input_size=input_size, n_output=OUTPUT_CHANNELS
-                            , n_base=16, batchnorm=True, dropout=0.15)
-    #model = multires_unet.mr_unet(input_size=input_size, n_output=OUTPUT_CHANNELS
-    #                        , batchnorm=False, dropout=0, n_layers=4)
-
+                            , n_base=32, batchnorm=True, dropout=0.3)
+    #model = multires_unet.mr_unet(input_size=input_size, n_output=OUTPUT_CHANNELS,
+    #                                batchnorm=False, dropout=0, n_layers=4)
+    
 
 model.summary()
 
 #weights_arr = np.array([0.256,0.012,0.279,0.014,0.023,0.301,0.116])
-weights_arr = np.array([0.750,0.250])
+weights_arr = np.array([5.,1.])
 weights_arr = (1/weights_arr)
 weights_arr = weights_arr / weights_arr.min()
 
-loss = lambda x, y : my_weighted_loss(tf.keras.losses.categorical_crossentropy,x,y,
-                                      weights=weights_arr)
+if OUTPUT_CHANNELS == 1:
+    loss = tf.keras.losses.binary_crossentropy
+else:
+    #loss = lambda x, y : my_weighted_loss(tf.keras.losses.categorical_crossentropy,x,y,
+    #                                          weights=weights_arr)
+    loss = tf.keras.losses.categorical_crossentropy
 
-#loss = tf.keras.losses.categorical_crossentropy
 
 model.compile(optimizer='adam',
               loss=loss,
               metrics=['accuracy'])
 
-EPOCHS = 20
+EPOCHS = 10
 VAL_SUBSPLITS = 8
 VALIDATION_STEPS = info['test_count'] // BATCH_SIZE // VAL_SUBSPLITS
 
 checkpoint = ModelCheckpoint('./models/checkpoint.hdf5', monitor='val_loss',
                              verbose=1, save_best_only=True)
 
-csv_logger = CSVLogger('./log_retiled_drop.out', separator=',')
+csv_logger = CSVLogger('./log_retiled_binary.out', separator=',')
 
 earlystopping = EarlyStopping(monitor='val_loss', verbose=1,
                               min_delta=0.0001, patience=10)
@@ -131,9 +126,9 @@ model_history = model.fit(train_dataset, epochs=EPOCHS,
                           validation_data=val_dataset,
                           callbacks=callbacks_list)
 
-model.save('./models/model_unet_2_retiled_drop.hdf5')
+model.save('./models/model_unet_xs_aug.hdf5')
 
-outputs.show_predictions(model,test.shuffle(100),num=6,interactive=False)
+#outputs.show_predictions(model,test.shuffle(100),num=6,interactive=False)
 
 loss = model_history.history['loss']
 val_loss = model_history.history['val_loss']
