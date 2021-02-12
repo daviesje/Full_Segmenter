@@ -13,20 +13,29 @@ data.constants.n_labels = 2
 
 gs = gridspec.GridSpec(2,3)
 
-b_tile = '../multiclass_seg/Bleaching_glare_map_big_02_08.png'
-b_mask = '../multiclass_seg/Bleaching_glare_polygon_big_02_08.png'
-m_tile = '../multiclass_seg/main0509.png'
-m_mask = '../multiclass_seg/mask_cube0509'
+b_tile = '../multiclass_seg/try_these/ortho_02_03.png'
+b_mask = '../multiclass_seg/try_these/mask_02_03.png'
+#m_tile = '../multiclass_seg/try_these/ortho_02_04.png'
+#m_mask = '../multiclass_seg/try_these/mask_02_04.png'
+m_mask = '../multiclass_seg/Bleaching_glare_polygon_big_02_08.png'
+m_tile = '../multiclass_seg/Bleaching_glare_map_big_02_08.png'
+#m_tile = '../multiclass_seg/main0509.png'
+#m_mask = '../multiclass_seg/mask_cube0509'
 
 m_tile = tile_images.read_image(m_tile)
 b_tile = tile_images.read_image(b_tile)
-m_mask = np.loadtxt(m_mask,dtype=int,delimiter=' ',comments='#',ndmin=2)
+m_mask = tile_images.read_image(m_mask)
+#m_mask = np.loadtxt(m_mask,dtype=int,delimiter=' ',comments='#',ndmin=2)
 b_mask = tile_images.read_image(b_mask)
 #np.loadtxt(b_mask,dtype=int,delimiter=' ',comments='#',ndmin=2)
 
+print(b_mask.shape,b_tile.shape)
+m_tile = b_tile
+m_mask = np.roll(b_mask,10,axis=0)
+b_mask = np.roll(b_mask,5,axis=0)
 #glare only
-check = m_mask == 1
-m_mask = m_mask * check
+#check = m_mask == 1
+#m_mask = m_mask * check
 
 
 fig = plt.figure(figsize=(8,6))

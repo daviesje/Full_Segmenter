@@ -18,8 +18,11 @@ val_split = np.array([0.8,0.1,0.1])
 n_split = np.array([0,0,1])
 val_indices = np.array([])
 
-mask_prefix = 'Bleaching_glare_polygon_big_'
-tile_prefix = 'Bleaching_glare_map_big_'
+#mask_prefix = 'Bleaching_glare_polygon_big_'
+#tile_prefix = 'Bleaching_glare_map_big_'
+mask_prefix = 'ortho_'
+tile_prefix = 'mask_'
+
 
 def blockshaped(arr,subh,subw):
     h = arr.shape[0]
