@@ -30,9 +30,13 @@ b_mask = tile_images.read_image(b_mask)
 #np.loadtxt(b_mask,dtype=int,delimiter=' ',comments='#',ndmin=2)
 
 print(b_mask.shape,b_tile.shape)
-m_tile = b_tile
-m_mask = np.roll(b_mask,10,axis=0)
-b_mask = np.roll(b_mask,5,axis=0)
+m_tile = np.copy(b_tile)
+m_mask = np.roll(np.copy(b_mask),6,axis=0)
+m_mask[:6,...] = 0
+m_tile[:6,...] = 0
+b_mask = np.roll(b_mask,20,axis=0)
+b_mask[:20,...] = 0
+b_tile[:20,...] = 0
 #glare only
 #check = m_mask == 1
 #m_mask = m_mask * check

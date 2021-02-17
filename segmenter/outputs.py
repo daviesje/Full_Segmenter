@@ -8,15 +8,15 @@ def create_mask(model,image,mask=None,weights=None):
         image = image[None,...]
         
     pred_mask = model.predict(image)
-    if mask is not None:
-        if not tf.reduce_all(pred_mask.shape[-3:] == mask.shape[-3:]):
-            print(f'shape error: mask {mask.shape} pred {pred_mask.shape}')
-            quit()
+    #if mask is not None:
+    #    if not tf.reduce_all(pred_mask.shape[-3:] == mask.shape[-3:]):
+    #        print(f'shape error: mask {mask.shape} pred {pred_mask.shape}')
+    #        #quit()
     
     #TODO: maybe not hardcode the shape (although it will never not be this)
     if weights is None:
         if pred_mask.shape[-1] == 1:
-            weights = 0 #this default is hardcoded assuming a sigmoid activation
+            weights = 0.5 #this default is hardcoded assuming a sigmoid activation
         else:
             weights = tf.ones([1,1,1,pred_mask.shape[-1]])
     else:

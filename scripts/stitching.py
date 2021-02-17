@@ -88,39 +88,35 @@ for i,tile in enumerate(tilebuf):
     img = tile.astype(float) / 255.
     pred_mask[i,...],_ = outputs.create_mask(model,img,weights=weightarr)
 
-pred_mask = outputs.to_colors(pred_mask)
-if maskpath is not None:
-  big_mask = outputs.to_colors(big_mask)
-
-out_image = np.zeros(big_image.shape)
-
 #RE-CONSTRUCT LARGE IMAGE FROM TILES
 print(f're-stitching...')
-out_image[...,0] = tile_images.unblockshaped(pred_mask[...,0],in_dim[0],in_dim[1])
-out_image[...,1] = tile_images.unblockshaped(pred_mask[...,1],in_dim[0],in_dim[1])
-out_image[...,2] = tile_images.unblockshaped(pred_mask[...,2],in_dim[0],in_dim[1])
+pred_mask = tile_images.unblockshaped(pred_mask,in_dim[0],in_dim[1])
 
-out_image = (out_image*255).astype(np.uint8)
+#print error matrix
+true_pos = np.sum(np.logical_and(pred_mask == 1, big_mask == 1))
+fals_pos = np.sum(np.logical_and(pred_mask == 1, big_mask == 0))
+true_neg = np.sum(np.logical_and(pred_mask == 0, big_mask == 0))
+fals_neg = np.sum(np.logical_and(pred_mask == 0, big_mask == 1))
 
-fig = plt.figure(figsize=(8,6))
-ax = fig.add_subplot(221)
-ax.imshow(tilebuf[0,...],interpolation='none')
-ax = fig.add_subplot(222,sharex=ax,sharey=ax)
-ax.imshow(big_image[:256,:256,:],interpolation='none')
-ax = fig.add_subplot(223,sharex=ax,sharey=ax)
-ax.imshow((pred_mask[0,...]*255).astype(np.uint8),interpolation='none')
-ax = fig.add_subplot(224,sharex=ax,sharey=ax)
-ax.imshow(out_image[:256,:256,:],interpolation='none')
-#plt.show()
-#quit()
+print(f'accuracy = {(true_pos + true_neg)/(true_pos + true_neg + fals_neg + fals_pos)}')
+print(f'precision = {true_pos/(true_pos+fals_pos)}')
+print(f'recall = {true_pos/(true_pos+fals_neg)}')
 
-outname = f'{outdir}/mask_{strbase}.png'
-print(f'saving to {outname}')
-im = Image.fromarray(out_image)
-im.save(outname)
+pred_mask = outputs.to_colors(pred_mask)
+if maskpath is not None:
+  print(big_mask.shape)
+  big_mask = outputs.to_colors(big_mask)
+
+pred_mask = (pred_mask*255).astype(np.uint8)
+
+if outdir is not None:
+  outname = f'{outdir}/mask_{strbase}.png'
+  print(f'saving to {outname}')
+  im = Image.fromarray(pred_mask)
+  im.save(outname)
 
 print(big_image.shape)
-print(out_image.shape)
+print(pred_mask.shape)
 if maskpath is not None:
   print(big_mask.shape)
 
@@ -128,26 +124,20 @@ if maskpath is not None:
   fig = plt.figure(figsize=(8,5))
   ax = fig.add_subplot(131)
   ax.imshow(big_image,interpolation='none')
+  ax.set_title('image')
   ax = fig.add_subplot(132,sharex=ax,sharey=ax)
-  ax.imshow(out_image,interpolation='none')
+  ax.set_title('net output')
+  ax.imshow(pred_mask,interpolation='none')
   ax = fig.add_subplot(133,sharex=ax,sharey=ax)
+  ax.set_title('truth')
   ax.imshow(big_mask,interpolation='none')
   plt.show()
 
-  #print error matrix
-  true_pos = np.sum(np.logical_and(out_image == 1, big_mask == 1))
-  fals_pos = np.sum(np.logical_and(out_image == 1 & big_mask == 0))
-  true_neg = np.sum(np.logical_and(out_image == 0 & big_mask == 0))
-  fals_neg = np.sum(np.logical_and(out_image == 0 & big_mask == 1))
-
-  print(f'accuracy = {(true_pos + true_neg)/(true_pos + true_neg + fals_neg + fals_pos)}')
-  print(f'precision = {true_pos/(true_pos+fals_pos)}')
-  print(f'recall = {true_pos/(true_pos+fals_neg)}')
 
 else:
   fig = plt.figure(figsize=(8,5))
   ax = fig.add_subplot(121)
   ax.imshow(big_image,interpolation='none')
   ax = fig.add_subplot(122,sharex=ax,sharey=ax)
-  ax.imshow(out_image,interpolation='none')
+  ax.imshow(pred_mask,interpolation='none')
   plt.show()

@@ -30,11 +30,12 @@ if gpus:
 #tf.config.experimental.set_visible_devices([], 'GPU')
 
 IMG_SIZE = (256, 256)
-OUTPUT_CHANNELS = 2
+OUTPUT_CHANNELS = 1
 IMG_CHANNELS = 3
 input_size = IMG_SIZE + (IMG_CHANNELS,)
+model_suffix = 'unet_tt_binary_aug'
 
-train, val, test, info = data.load_images('../multiclass_seg/x-sensing/', img_size=IMG_SIZE, n_labels=OUTPUT_CHANNELS)
+train, val, test, info = data.load_images('../multiclass_seg/another_one/', img_size=IMG_SIZE, n_labels=OUTPUT_CHANNELS)
 
 TRAIN_LENGTH = info['train_count']
 print(f'debug: train images {TRAIN_LENGTH}')
@@ -80,10 +81,9 @@ if len(sys.argv) > 1:
     model = tf.keras.models.load_model(sys.argv[1], custom_objects={'<lambda>': lambda y_true, y_pred: y_pred})
 else:
     model = unet_model.unet(input_size=input_size, n_output=OUTPUT_CHANNELS
-                            , n_base=32, batchnorm=True, dropout=0.3)
+                            , n_base=32, batchnorm=True, dropout=0.5)
     #model = multires_unet.mr_unet(input_size=input_size, n_output=OUTPUT_CHANNELS,
     #                                batchnorm=False, dropout=0, n_layers=4)
-    
 
 model.summary()
 
@@ -95,23 +95,22 @@ weights_arr = weights_arr / weights_arr.min()
 if OUTPUT_CHANNELS == 1:
     loss = tf.keras.losses.binary_crossentropy
 else:
-    #loss = lambda x, y : my_weighted_loss(tf.keras.losses.categorical_crossentropy,x,y,
-    #                                          weights=weights_arr)
-    loss = tf.keras.losses.categorical_crossentropy
-
+    loss = lambda x, y : my_weighted_loss(tf.keras.losses.categorical_crossentropy,x,y,
+                                              weights=weights_arr)
+    #loss = tf.keras.losses.categorical_crossentropy
 
 model.compile(optimizer='adam',
               loss=loss,
               metrics=['accuracy'])
 
-EPOCHS = 10
+EPOCHS = 20
 VAL_SUBSPLITS = 8
 VALIDATION_STEPS = info['test_count'] // BATCH_SIZE // VAL_SUBSPLITS
 
 checkpoint = ModelCheckpoint('./models/checkpoint.hdf5', monitor='val_loss',
                              verbose=1, save_best_only=True)
 
-csv_logger = CSVLogger('./log_retiled_binary.out', separator=',')
+csv_logger = CSVLogger(f'./log_{model_suffix}.out', separator=',')
 
 earlystopping = EarlyStopping(monitor='val_loss', verbose=1,
                               min_delta=0.0001, patience=10)
@@ -126,9 +125,7 @@ model_history = model.fit(train_dataset, epochs=EPOCHS,
                           validation_data=val_dataset,
                           callbacks=callbacks_list)
 
-model.save('./models/model_unet_xs_aug.hdf5')
-
-#outputs.show_predictions(model,test.shuffle(100),num=6,interactive=False)
+model.save(f'./models/model_{model_suffix}.hdf5')
 
 loss = model_history.history['loss']
 val_loss = model_history.history['val_loss']
@@ -143,7 +140,7 @@ ax.plot(epochs, loss, 'r', label='Training loss')
 ax.plot(epochs, val_loss, 'bo', label='Validation loss')
 ax.set_xlabel('Epoch')
 ax.set_ylabel('Loss Value')
-ax.set_ylim([0,loss[0]])
+ax.set_ylim([0,max(loss[0],val_loss[0])])
 ax.legend()
 ax=fig.add_subplot(212)
 ax.plot(epochs, acc, 'r', label='Training acc')
@@ -152,4 +149,4 @@ ax.set_xlabel('Epoch')
 ax.set_ylabel('accuracy')
 ax.set_ylim([0,1])
 ax.legend()
-fig.savefig('./plots/history_temp.png')
+fig.savefig(f'./plots/history_{model_suffix}.png')

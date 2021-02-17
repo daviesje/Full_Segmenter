@@ -43,28 +43,31 @@ def augment(input_image,input_mask):
     input_image = tf.image.rot90(input_image,k=rot)
     input_mask = tf.image.rot90(input_mask,k=rot)
 
-    if tf.random.uniform(()) > 0:
+    if tf.random.uniform(()) > 0.2:
         #COLOR AUGMENTATION
         input_image = tf.image.random_brightness(input_image, 0.2)
         input_image = tf.image.random_saturation(input_image, 0.5, 2)
         input_image = tf.image.random_hue(input_image, 0.2)
         input_image = tf.image.random_contrast(input_image, 0.5, 2)
 
-    if tf.random.uniform(()) > 0:
+    if tf.random.uniform(()) > 0.2:
         #SCALE - ZOOM OUT AND PAD TILE TO 256x256 WITH 0
         #up to a doubling of size
         scale = tf.random.uniform((), 0, constants.img_size[0], dtype='int32')
         input_image = scale_randomizer(input_image, scale,'bilinear')
         input_mask = scale_randomizer(input_mask, scale, 'bilinear')
     
+        #decide if glare or bg based on interpolation at 0.5
+        #rotation and scale changes can blur the segmentations so we have to
+        #draw the line somewhere
+        if constants.n_labels == 1:
+            input_mask = tf.math.floor(input_mask + 0.5)
+            input_mask = tf.image.convert_image_dtype(input_mask, tf.uint8)
+            input_mask = input_mask // constants.z_steps
+    
     input_image = tf.clip_by_value(input_image, 0.0, 1.0)
 
     return input_image, input_mask
-
-#TODO a more modular data prepare function
-def prepare(dataset,format='png',augment=False,mask=False):
-    return
-
 
 def joint_parser(img_path,mask_path):
 
@@ -78,6 +81,7 @@ def joint_parser(img_path,mask_path):
 
     #divide by brightness steps per category
     mask = mask[...,0] // constants.z_steps
+    mask = mask[...,None]
 
     if constants.n_labels > 1:
         mask = tf.one_hot(mask, constants.n_labels)
