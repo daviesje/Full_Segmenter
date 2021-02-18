@@ -31,7 +31,6 @@ model = tf.keras.models.load_model(sys.argv[1]
 data_dir = '../multiclass_seg/another_one/'
 _,_,test,info = data.load_images(data_dir,(256,256),n_labels=n_categ,mask_channels=1)
 ntest = info['test_count']
-ntrain = info['train_count']
 print(f'total {ntest} testing images')
 
 sigmoid = lambda x : 1/(1+np.exp(-x))
@@ -51,7 +50,7 @@ else:
     thresholds = np.insert(thresholds,0,0)
     thresholds = np.append(thresholds,1)
 
-
+print(f'thresholds = {thresholds}')
 #thresholds = np.array([0.5])
 #nthrsh = 1
 
@@ -64,33 +63,24 @@ error_matrix = np.zeros((nthrsh,n_dim,n_dim))
 mask_frac = np.zeros((nthrsh,ntest,n_dim))
 pred_frac = np.zeros((nthrsh,ntest,n_dim))
 
-for i, t in enumerate(thresholds):
-    weights = t
-    print(f'%{i}th threshold, {t}')
-    #TODO: this is really inefficient, will separate create_mask into output
-    #  generation and prediction, to generate one mask and apply several weights
-    j = 0
-    for image, mask in test:
-        #if j%25==0: print(j)
-        #print(np.unique(mask.numpy().reshape(65536,n_categ),return_counts=True,axis=0))
-        pred, mask = outputs.create_mask(model,image,mask,weights=weights)
-        
-        mbuf = mask.numpy()
-        pbuf = pred.numpy()
-        vals,_ = tf.unique(mbuf.flatten())
-        valsp,_ = tf.unique(pbuf.flatten())
+j = 0
+#TODO: batches of images instead of singles
+for image, mask in test:
+    if j%50==0: print(j)
+    #print(np.unique(mask.numpy().reshape(65536,n_categ),return_counts=True,axis=0))
+    pred, mask = outputs.create_mask(model,image,mask,weights=weights)
 
-        for n_m in range(n_dim):
-            #PER IMAGE SUMS
-            mask_frac[i,j,n_m] = np.sum(mbuf==n_m)/mbuf.size
-            pred_frac[i,j,n_m] = np.sum(pbuf==n_m)/pbuf.size
+    for n_m in range(n_dim):
+        #PER IMAGE SUMS
+        mask_frac[:,j,n_m] = np.sum(mbuf==n_m,axis=(1,2,3))/mbuf.size
+        pred_frac[:,j,n_m] = np.sum(pbuf==n_m,axis=(1,2,3))/pbuf.size
             
-            # ERROR MATRIX
-            for n_p in range(n_dim):
-                buf = np.sum(np.logical_and(mbuf==n_m,pbuf==n_p))
-                error_matrix[i,n_m,n_p] += buf
+        # ERROR MATRIX
+        for n_p in range(n_dim):
+            buf = np.sum(np.logical_and(mbuf==n_m,pbuf==n_p))
+            error_matrix[:,n_m,n_p] += buf
 
-        j = j + 1
+    j = j + 1
 
 xbase = np.linspace(0,1,num=50)
 zero = np.zeros(xbase.shape)
@@ -102,13 +92,13 @@ mask_sums = error_matrix.sum(axis=2)[:,:,None]
 fals_pos = error_matrix[:,0,1]
 true_pos = error_matrix[:,1,1]
 
-#false pos / pred pos
+#Precision == false pos / pred pos
 PRECISION = true_pos/pred_sums[:,0,1]
-#true pos / mask pos
+#Recall == true pos / mask pos
 RECALL = true_pos/mask_sums[:,1,0]
-print("precision")
+print("Precision")
 print(PRECISION)
-print("recall")
+print("Recall")
 print(RECALL)
 
 #FPR = [0,1]/([0,1]+ [0,0]) == false positives / mask negatives
