@@ -1,6 +1,7 @@
 import tensorflow as tf
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
+import numpy as np
 
 #TODO: generating a mask for each weight set is inefficient, do something better
 def create_mask(model,image,truth=None,weights=None):
@@ -8,20 +9,23 @@ def create_mask(model,image,truth=None,weights=None):
         image = image[None,...]
         
     pred_mask = model.predict(image)
-    pred_mask = pred_mask.numpy()
-    truth = truth.numpy()
+    #pred_mask = pred_mask.numpy()
 
-    print(f'initial mask shape: {pred_mask.shape}')
-
+    
     #binary refers to where the output shape is one with 2 classes
     binary = pred_mask.shape[-1] == 1
 
-    if mask is not None:
+    if truth is not None:    
+        truth = truth.numpy()
+        if len(truth.shape) == 3:
+            truth = truth[None,...]
         if not tf.reduce_all(pred_mask.shape[1:] == truth.shape[1:]):
             print(f'shape error: mask {truth.shape} pred {pred_mask.shape}')
             quit()
-    
-    n_weights = weights.shape[0]
+
+    #print(np.amin(pred_mask),np.amax(pred_mask))
+    #print(f'initial mask shape: {pred_mask.shape} {truth.shape}')
+    #print(np.unique(truth,return_counts=True))
 
     #TODO: maybe not hardcode the shape (although it will never not be this)
     #set default weights/threshold
@@ -30,29 +34,37 @@ def create_mask(model,image,truth=None,weights=None):
             weights = 0.5 #this default is assuming a sigmoid activation
         else:
             weights = np.ones([1,1,1,pred_mask.shape[-1]])
+        n_weights = 1
     else:
+        #change axes to [weight,x,y,class]
+        n_weights = weights.shape[0]
         if not binary:
-            weights = weights.reshape((n_weights,1,1,pred_mask.shape[-1]))
+            weights = weights[:,None,None,:]
+        else:
+            weights = weights[:,None,None,None]
     
-    #out_shape = np.insert(pred_mask.shape[1:],0,n_weights)
-    #predictions = np.full(out_shape,-1)
     #cast probabilities to class number
     if not binary:
         #categorical case
         pred_mask = pred_mask * weights
 
         pred_mask = np.argmax(pred_mask, axis=-1)
-        
+    
         if truth is not None:
-            truth = tf.argmax(truth, axis=-1)
+            truth = np.argmax(truth, axis=-1)
+
     else:
         #binary case
         pred_mask = pred_mask > weights
         if truth is not None:
             truth = truth > weights
 
-    print(f'final shape {pred_mask.shape} {truth.shape}')
-
+    pred_mask = np.squeeze(pred_mask.astype(int))
+    if truth is not None:
+        truth = np.squeeze(truth.astype(int))
+    #print(f'final shape {pred_mask.shape} {truth.shape}')
+    #print(f'weights shape {weights.shape}')
+    
     return pred_mask, truth
     
 
@@ -71,10 +83,10 @@ def to_colors(mask,cmapstr=None):
 def show_predictions(model, dataset, num=1,weights=None,interactive=False):
     image_arr = []
     for image, mask in dataset.take(num):
-        pbuf, mbuf = create_mask(model,image,mask=mask,weights=weights)
+        pbuf, mbuf = create_mask(model,image,truth=mask,weights=weights)
         image_arr.append([image, tf.squeeze(mbuf), tf.squeeze(pbuf)])
-        print(mbuf.shape,pbuf.shape)
-        print(mbuf.numpy().min(),mbuf.numpy().max())
+        #print(mbuf.shape,pbuf.shape)
+        #print(mbuf.numpy().min(),mbuf.numpy().max())
 
     if len(mbuf.shape) == 3:
         n_categ = max(mask.shape[-1],2)

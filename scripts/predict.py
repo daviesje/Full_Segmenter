@@ -36,29 +36,31 @@ print(f'total {ntest} testing images')
 sigmoid = lambda x : 1/(1+np.exp(-x))
 
 ntake = 6                    
-nthrsh = 20
-thrshmax = 8
+nthrsh = 40
+thrshmax = 4
+thrshmin = -14
 if n_categ > 1:
-    thresholds = np.logspace(np.log10(1/thrshmax),np.log10(thrshmax),num=nthrsh-2,base=10)
+    thresholds = np.logspace(np.log10(thrshmin),np.log10(thrshmax),num=nthrsh,base=10)
     buf = np.ones(thresholds.shape)
-    thresholds = np.concatenate(thresholds,buf,axis=1)
-    thresholds = np.insert(thresholds,0,np.array([0,1]),axis=0)
-    thresholds = np.append(thresholds,np.array([1,0]),axis=0)
+    #thresholds = np.concatenate(thresholds,buf,axis=1)
+    #thresholds = np.insert(thresholds,0,np.array([0,1]),axis=0)
+    #thresholds = np.append(thresholds,np.array([1,0]),axis=0)
 else:
-    thresholds = np.linspace(-thrshmax,thrshmax,nthrsh-2)
+    thresholds = np.linspace(thrshmin,thrshmax,nthrsh-2)
     thresholds = sigmoid(thresholds)
     thresholds = np.insert(thresholds,0,0)
     thresholds = np.append(thresholds,1)
 
 print(f'thresholds = {thresholds}')
-#thresholds = np.array([0.5])
+#thresholds = np.array([0.19])
 #nthrsh = 1
 
-image_arr = outputs.show_predictions(model,test.shuffle(1000),ntake,interactive=True)
+image_arr = outputs.show_predictions(model,test.shuffle(5000),ntake,interactive=True,weights=np.array([0.19]))
+quit()
 
 n_dim = max(2,n_categ)
 
-error_matrix = np.zeros((nthrsh,n_dim,n_dim))
+error_matrix = np.zeros((nthrsh,n_dim,n_dim),dtype=int)
 
 mask_frac = np.zeros((nthrsh,ntest,n_dim))
 pred_frac = np.zeros((nthrsh,ntest,n_dim))
@@ -66,71 +68,96 @@ pred_frac = np.zeros((nthrsh,ntest,n_dim))
 j = 0
 #TODO: batches of images instead of singles
 for image, mask in test:
-    if j%50==0: print(j)
+    if j%100==0: print(j)
     #print(np.unique(mask.numpy().reshape(65536,n_categ),return_counts=True,axis=0))
-    pred, mask = outputs.create_mask(model,image,mask,weights=weights)
+    pred, truth = outputs.create_mask(model,image,mask,weights=thresholds)
 
     for n_m in range(n_dim):
         #PER IMAGE SUMS
-        mask_frac[:,j,n_m] = np.sum(mbuf==n_m,axis=(1,2,3))/mbuf.size
-        pred_frac[:,j,n_m] = np.sum(pbuf==n_m,axis=(1,2,3))/pbuf.size
+        #print(np.sum(truth==n_m,axis=(1,2,3)))
+        #print(np.sum(pred==n_m,axis=(1,2,3)))
+        mask_frac[:,j,n_m] = np.sum(truth==n_m,axis=(1,2,3))/np.product(truth.shape[1:])
+        pred_frac[:,j,n_m] = np.sum(pred==n_m,axis=(1,2,3))/np.product(pred.shape[1:])
             
         # ERROR MATRIX
         for n_p in range(n_dim):
-            buf = np.sum(np.logical_and(mbuf==n_m,pbuf==n_p))
+            buf = np.sum(np.logical_and(truth==n_m,pred==n_p),axis=(1,2,3))
             error_matrix[:,n_m,n_p] += buf
 
     j = j + 1
 
 xbase = np.linspace(0,1,num=50)
-zero = np.zeros(xbase.shape)
-one = np.ones(xbase.shape)
 
-pred_sums = error_matrix.sum(axis=1)[:,None,:]
-mask_sums = error_matrix.sum(axis=2)[:,:,None]
+pred_sums = error_matrix.sum(axis=1)
+mask_sums = error_matrix.sum(axis=2)
 
 fals_pos = error_matrix[:,0,1]
 true_pos = error_matrix[:,1,1]
 
-#Precision == false pos / pred pos
-PRECISION = true_pos/pred_sums[:,0,1]
+#Precision == true pos / pred pos
+PRECISION = true_pos/pred_sums[:,1]
+#mark no positives as 1 precision (no false positives)
+PRECISION[np.isnan(PRECISION)] = 1
 #Recall == true pos / mask pos
-RECALL = true_pos/mask_sums[:,1,0]
+RECALL = true_pos/mask_sums[:,1]
 print("Precision")
-print(PRECISION)
+print(PRECISION*100)
 print("Recall")
-print(RECALL)
+print(RECALL*100)
 
 #FPR = [0,1]/([0,1]+ [0,0]) == false positives / mask negatives
 #TPR = [1,1]/([1,1] + [1,0]) == true positives / mask positives
 
-FPR = fals_pos/mask_sums[:,0,0]
-TPR = true_pos/mask_sums[:,1,0]
+FPR = fals_pos/mask_sums[:,0]
+TPR = true_pos/mask_sums[:,1]
 
 total_acc = (error_matrix[:,0,0]+error_matrix[:,1,1])/error_matrix.sum(axis=(1,2))
 
-np.set_printoptions(precision=5,suppress=True)
-#print("total pixels (row == real) (col == pred)")
-#print(error_matrix[0,...])
-#print("------------")
+print(FPR*100)
 
+np.set_printoptions(precision=5,suppress=True)
+print("total pixels (row == real) (col == pred)")
+#print(error_matrix)
+print("------mask norm------")
+#print(error_matrix/mask_sums[:,:,None])
+print("-----pred norm-------")
+#print(error_matrix/pred_sums[:,None,:])
 print("------------")
 print("mask fractions")
-print(mask_frac.mean(axis=1))
+#print(mask_frac.mean(axis=1))
 print("------------")
 print("pred fractions")
-print(pred_frac.mean(axis=1))
+#print(pred_frac.mean(axis=1))
 print("------------")
 print("accuracy")
-print(total_acc)
+#print(total_acc)
 print("------------")
 
+#remove same-x values from integration
+pvr_start = 0
+pvr_end = nthrsh
+if np.any(RECALL == 1):
+    pvr_start = np.nonzero(RECALL == 1)[0][-1]
+if np.any(RECALL == 0):
+    pvr_end = np.nonzero(RECALL == 0)[0][0]
+roc_start = 0
+roc_end = nthrsh
+if np.any(FPR == 1):
+    roc_start = np.nonzero(FPR == 1)[0][-1]
+if np.any(FPR == 0):
+    roc_end = np.nonzero(FPR == 0)[0][0]
 
-AUC_ROC = simps(TPR,FPR)
-AUC_PVR = simps(PRECISION,RECALL)
-AUC_RVP = simps(RECALL,PRECISION)
+print(pvr_start,pvr_end)
+print(roc_start,roc_end)
+PRECISION = PRECISION[pvr_start:pvr_end]
+RECALL = RECALL[pvr_start:pvr_end]
+TPR = TPR[roc_start:roc_end]
+FPR = FPR[roc_start:roc_end]
 
-print(f"AUC for ROC = {AUC_ROC} ||  for PVR = {AUC_PVR} || for RVP = {AUC_RVP}")
+AUC_ROC = simps(TPR[::-1],FPR[::-1])
+AUC_PVR = simps(PRECISION[::-1],RECALL[::-1])
+
+print(f"AUC for ROC = {AUC_ROC} ||  for PVR = {AUC_PVR}")
 
 #print('histogram')
 #print(np.histogram(mask_frac[:,:,1],bins=np.linspace(0,1,num=11))[0])
@@ -152,7 +179,7 @@ if nthrsh > 1:
         , linestyle='solid', linewidth=2, markersize=5)
     ax.set_ylabel('% Precision')
     ax.set_xlabel('% Recall')
-    ax.set_title(f'Precision vs Recall curve, AUC = {AUC_ROC}')
+    ax.set_title(f'Precision vs Recall curve, AUC = {AUC_PVR}')
 
     #fig.savefig('./plots/ROC_2.png')
 

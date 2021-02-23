@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 #cols: 0=epoch, 1=accuracy, 2=loss, 3=val_accuracy, 4=val_loss
-history = np.loadtxt('log_retiled_drop.out',dtype=float,delimiter=',',comments='#',ndmin=2)
+history = np.loadtxt('log_retiled_binary.out',dtype=float,delimiter=',',comments='#',ndmin=2)
 
 epochs = history[:,0]
 acc = history[:,1]
@@ -31,5 +31,5 @@ ax.set_ylabel('Log10 (1 - Accuracy)')
 #ax.set_ylim([0,1])
 ax.legend()
 fig.tight_layout()
-fig.savefig('./plots/history_drop.png')
+fig.savefig('./plots/history_binary.png')
 

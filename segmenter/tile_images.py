@@ -20,8 +20,8 @@ val_indices = np.array([])
 
 #mask_prefix = 'Bleaching_glare_polygon_big_'
 #tile_prefix = 'Bleaching_glare_map_big_'
-mask_prefix = 'ortho_'
-tile_prefix = 'mask_'
+mask_prefix = 'mask_'
+tile_prefix = 'ortho_'
 
 
 def blockshaped(arr,subh,subw):
@@ -59,6 +59,10 @@ def tile_images(indir,outdir,tilenum):
         print(f'dimension mismatch for {tilenum}')
         return 1
 
+    #TODO: remove this with new datasets, one dataset was skewed
+    if "try_these" in indir:
+        fullimage[:6,...] = 0
+
     buf = np.zeros((n_tiles,out_dim,out_dim,3))
     buf[...,0] = blockshaped(fullimage[...,0],out_dim,out_dim)
     buf[...,1] = blockshaped(fullimage[...,1],out_dim,out_dim)
@@ -86,10 +90,24 @@ def tile_masks(indir,outdir,tilenum):
         print(f'dimension mismatch for {tilenum}')
         return 1
     
-    buf = np.zeros((n_tiles,out_dim,out_dim,3))
-    buf[...,0] = blockshaped(fullimage[...,0],out_dim,out_dim)
-    buf[...,1] = blockshaped(fullimage[...,1],out_dim,out_dim)
-    buf[...,2] = blockshaped(fullimage[...,2],out_dim,out_dim)
+    #TODO: remove this with new datasets, the "try_these" dataset was skewed
+    if "try_these" in indir:
+        print("WARNING: SHIFTING MASKS BY 6 TO CORRECT")
+        fullimage = np.roll(fullimage,6,axis=0)
+        fullimage[:6,...] = 0
+
+    #colour case
+    if len(fullimage.shape) == 3:
+        buf = np.zeros((n_tiles,out_dim,out_dim,3))
+        buf[...,0] = blockshaped(fullimage[...,0],out_dim,out_dim)
+        buf[...,1] = blockshaped(fullimage[...,1],out_dim,out_dim)
+        buf[...,2] = blockshaped(fullimage[...,2],out_dim,out_dim)
+    #grayscale case
+    elif len(fullimage.shape) == 2:
+        buf = blockshaped(fullimage,out_dim,out_dim)
+    else:
+        print('images are not 2/3 dimensional')
+        quit()
 
     #buf = blockshaped(fullimage,out_dim,out_dim) * brightness_const
     buf = buf.astype('uint8')
@@ -176,7 +194,7 @@ def cleanup_dir(outdir):
             f = f.replace('\\','/')
             image = read_image(f)
             
-            if np.all(image==255) or np.all(image==0):
+            if np.all(np.logical_or(image==255,image==0)):
                 #remove file
                 print(f'removing {f}')
                 remove(f)
@@ -242,11 +260,10 @@ def do_all_tiling(indir,outdir):
 if __name__ == "__main__":
     indir = sys.argv[1]
     outdir = sys.argv[2]
-    #tilenum = sys.argv[3]
 
-    #do_all_tiling(indir,outdir)
+    do_all_tiling(indir,outdir)
     
     check_dirs(outdir)
     cleanup_dir(outdir)
-    cleanup_masks(outdir)
+    #cleanup_masks(outdir)
     check_dirs(outdir)

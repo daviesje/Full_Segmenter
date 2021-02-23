@@ -93,14 +93,15 @@ print(f're-stitching...')
 pred_mask = tile_images.unblockshaped(pred_mask,in_dim[0],in_dim[1])
 
 #print error matrix
-true_pos = np.sum(np.logical_and(pred_mask == 1, big_mask == 1))
-fals_pos = np.sum(np.logical_and(pred_mask == 1, big_mask == 0))
-true_neg = np.sum(np.logical_and(pred_mask == 0, big_mask == 0))
-fals_neg = np.sum(np.logical_and(pred_mask == 0, big_mask == 1))
+if maskpath is not None:
+  true_pos = np.sum(np.logical_and(pred_mask == 1, big_mask == 1))
+  fals_pos = np.sum(np.logical_and(pred_mask == 1, big_mask == 0))
+  true_neg = np.sum(np.logical_and(pred_mask == 0, big_mask == 0))
+  fals_neg = np.sum(np.logical_and(pred_mask == 0, big_mask == 1))
 
-print(f'accuracy = {(true_pos + true_neg)/(true_pos + true_neg + fals_neg + fals_pos)}')
-print(f'precision = {true_pos/(true_pos+fals_pos)}')
-print(f'recall = {true_pos/(true_pos+fals_neg)}')
+  print(f'accuracy = {(true_pos + true_neg)/(true_pos + true_neg + fals_neg + fals_pos)}')
+  print(f'precision = {true_pos/(true_pos+fals_pos)}')
+  print(f'recall = {true_pos/(true_pos+fals_neg)}')
 
 pred_mask = outputs.to_colors(pred_mask)
 if maskpath is not None:
