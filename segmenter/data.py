@@ -32,6 +32,22 @@ def scale_randomizer(image, scale, method='bilinear'):
     
     return input_image
 
+def gauss_blur(input_image, sigma):
+    return tfa.image.gaussian_filter2d(input_image, filter_shape=[3,3], sigma=sigma, padding='CONSTANT')
+
+def median_blur(input_image, pixel):
+    return tfa.image.median_filter2d(input_image, filter_shape=[pixel,pixel], padding='CONSTANT')
+
+@tf.function
+def image_pre_blur(image, mask, sigma):
+    input_image = tf.image.resize(image, (constants.IMG_SIZE, constants.IMG_SIZE))
+    input_mask = tf.image.resize(mask, (constants.IMG_SIZE, constants.IMG_SIZE))
+
+    if tf.random.uniform(()) > 0.1:
+        input_image = tfa.image.gaussian_filter2d(input_image, filter_shape=[3,3], sigma=sigma, padding='CONSTANT')
+
+    return input_image, input_mask
+
 def augment(input_image,input_mask):
     # TODO: put more transformations, add calls in loading
     if tf.random.uniform(()) > 0.5:
@@ -95,7 +111,7 @@ def joint_parser(img_path,mask_path):
 
 
 # Tensorflow dataset loading (DOES NOT NEED TO FIT IN MEMORY)
-def load_images(data_dir, img_size=(128, 128), img_channels=3, mask_channels=1, n_labels=2):
+def load_images(data_dir, img_size=(128, 128), img_channels=3, mask_channels=1, n_labels=2, augment=False):
     # setting dimensions etc.
     data_dir = pathlib.Path(data_dir)
     constants.img_size = img_size
@@ -120,8 +136,8 @@ def load_images(data_dir, img_size=(128, 128), img_channels=3, mask_channels=1, 
     val = val.map(joint_parser, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     test = test.map(joint_parser, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     
-    #TODO: put behind flag
-    train = train.map(augment, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    if augment:
+        train = train.map(augment, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     info = {}
     image_count = len(list(data_dir.glob('train_tiles/*.png')))
