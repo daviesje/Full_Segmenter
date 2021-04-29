@@ -27,9 +27,6 @@ if gpus:
   except RuntimeError as e:
     print(e)
 
-brightness_const = 16
-out_dim = np.array([256,256,1])
-
 imfile = args.imfile
 outdir = args.outdir
 maskpath = args.maskfile
@@ -43,6 +40,9 @@ print(f'save directory: {outdir}')
 model = tf.keras.models.load_model(modelpath
                                    ,custom_objects={'<lambda>': lambda y_true, y_pred: y_pred})
 
+#input layer should have shape (None,x,y,channels)
+shp = model.layers[0].input_shape
+out_dim = np.array([shp[1],shp[2],1])
 
 #name for output file, remove dir path, remove extension
 strbase = ''.join(imfile.split('/')[-1].split('\\')[-1].split('.')[:-1])
@@ -82,7 +82,7 @@ tilebuf[...,2] = tile_images.blockshaped(big_image[...,2],out_dim[0],out_dim[1])
 #MODEL.PREDICT FOR EACH TILE
 print(f'performing image segmentation for {n_tiles} tiles')
 
-pred_mask = np.zeros([n_tiles,256,256])
+pred_mask = np.zeros([n_tiles,out_dim[0],out_dim[1]])
 
 for i,tile in enumerate(tilebuf):
     img = tile.astype(float) / 255.
