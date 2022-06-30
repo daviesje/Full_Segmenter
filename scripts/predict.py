@@ -28,7 +28,7 @@ model = tf.keras.models.load_model(sys.argv[1]
 #model = tf.keras.models.load_model(sys.argv[1])
 
 # LOAD IMAGES
-data_dir = '../multiclass_seg/another_one/'
+data_dir = '../input/test_images/'
 _,_,test,info = data.load_images(data_dir,(256,256),n_labels=n_categ,mask_channels=1)
 ntest = info['test_count']
 print(f'total {ntest} testing images')

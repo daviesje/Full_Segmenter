@@ -108,8 +108,6 @@ def joint_parser(img_path,mask_path):
 
     return img, mask
 
-
-
 # Tensorflow dataset loading (DOES NOT NEED TO FIT IN MEMORY)
 def load_images(data_dir, img_size=(128, 128), img_channels=3, mask_channels=1, n_labels=2, augment=False):
     # setting dimensions etc.
