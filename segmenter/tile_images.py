@@ -14,7 +14,10 @@ brightness_const = 16
 in_dim = 4096
 out_dim = 256
 n_tiles = in_dim**2 // out_dim**2
+
+#Manage proportions of Train/Validation/Test dataset
 val_split = np.array([0.8,0.1,0.1])
+
 n_split = np.array([0,0,1])
 val_indices = np.array([])
 
@@ -23,6 +26,18 @@ val_indices = np.array([])
 mask_prefix = 'mask_'
 tile_prefix = 'ortho_'
 
+def set_constants(val_split=val_split),in_dim_par=in_dim,out_dim_par=out_dir):
+    global in_dim, out_dim, n_tiles, val_indices, n_split
+    in_dim = in_dim_par
+    out_dim = out_dim_par
+    n_tiles = in_dim**2 // out_dim**2
+    n_split = (val_split*n_tiles).astype(int)
+    val_indices = np.arange(n_tiles)
+    np.random.shuffle(val_indices)
+
+    print(f'constants: in_dim = {in_dim} out_dim = {out_dim} n_tiles = {n_tiles} val_split = {n_split}')
+
+    return
 
 def blockshaped(arr,subh,subw):
     h = arr.shape[0]
@@ -124,19 +139,6 @@ def tile_masks(indir,outdir,tilenum):
 
     
     return 0
-
-def set_constants(val_split=np.array([0.8,0.1,0.1]),in_dim_par=4096,out_dim_par=256):
-    global in_dim, out_dim, n_tiles, val_indices, n_split
-    in_dim = in_dim_par
-    out_dim = out_dim_par
-    n_tiles = in_dim**2 // out_dim**2
-    n_split = (val_split*n_tiles).astype(int)
-    val_indices = np.arange(n_tiles)
-    np.random.shuffle(val_indices)
-
-    print(f'constants: in_dim = {in_dim} out_dim = {out_dim} n_tiles = {n_tiles} val_split = {n_split}')
-
-    return
 
 #check that each tile has a mask counterpart, and vice versa
 #then remove standalone images
@@ -259,7 +261,11 @@ def do_all_tiling(indir,outdir):
 
 if __name__ == "__main__":
     indir = sys.argv[1]
-    outdir = sys.argv[2]
+
+    if sys.argv[2]:
+        outdir = sys.argv[2]
+    else:
+        outdir = f'../input/train_images/'
 
     do_all_tiling(indir,outdir)
     

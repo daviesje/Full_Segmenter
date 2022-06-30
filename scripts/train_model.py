@@ -35,7 +35,7 @@ IMG_CHANNELS = 3
 input_size = IMG_SIZE + (IMG_CHANNELS,)
 model_suffix = 'unet_tt_binary_aug'
 
-train, val, test, info = data.load_images('../multiclass_seg/another_one/', img_size=IMG_SIZE, n_labels=OUTPUT_CHANNELS)
+train, val, test, info = data.load_images('../input/train_images/', img_size=IMG_SIZE, n_labels=OUTPUT_CHANNELS)
 
 TRAIN_LENGTH = info['train_count']
 print(f'debug: train images {TRAIN_LENGTH}')
